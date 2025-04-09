@@ -1,2 +1,4 @@
 # ENTIL
-Evolutionary Network Theory Inspired Learning Algorithm for Learning Multi‑Agent Communication.
+Evolutionary Network Theory Inspired Learning Algorithm for Reinforcement Learning.
+
+Implemented with evolutionary algorithm + PPO
