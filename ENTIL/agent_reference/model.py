@@ -4,16 +4,6 @@ from dataclasses import dataclass
 from typing import Dict, Mapping, Optional, Tuple, Any, Union
 
 
-@dataclass
-class AgentConfig:
-    n_hidden: int = 64
-    n_observation_actor: int = 21
-    n_observation_critic: int = 42
-    
-    n_action_continuous: Union[None, int] = None
-    n_action_discrete: Union[None, int] = None
-
-
 class AgentModule(nn.Module):
     def __init__(self):
         super().__init__()
