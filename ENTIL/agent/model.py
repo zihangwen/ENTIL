@@ -1,11 +1,17 @@
 import torch.nn as nn
 from torch.distributions import one_hot_categorical, normal
 from dataclasses import dataclass
+from typing import Dict, Mapping, Optional, Tuple, Any, Union
 
 
-# @dataclass
-# class CellConfig:
-
+@dataclass
+class AgentConfig:
+    n_hidden: int = 64
+    n_observation_actor: int = 21
+    n_observation_critic: int = 42
+    
+    n_action_continuous: Union[None, int] = None
+    n_action_discrete: Union[None, int] = None
 
 
 class AgentModule(nn.Module):
