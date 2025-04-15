@@ -21,8 +21,8 @@ import multiprocessing as mp
 
 from envs.world import *
 from envs.util import *
-from agent.wrapper import *
-from agent.model import *
+from agent_reference.wrapper import *
+from agent_reference.model import *
 
 def make_checkpoint(sol_pool):
     checkpoint = dict()

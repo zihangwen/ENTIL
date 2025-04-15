@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from envs.util import running
-from agent.model import AgentModule
+from agent_reference.model import AgentModule
 
 
 class Solution(object):
