@@ -19,7 +19,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 num_envs = 8
 
 # %%
-envs = gym.make_vec("Blackjack", num_envs=num_envs, vectorization_mode="sync")
+envs = gym.make_vec("Ant-v5", num_envs=num_envs, vectorization_mode="sync")
 
 # %%
 obs_shape = envs.observation_space.shape[1:]

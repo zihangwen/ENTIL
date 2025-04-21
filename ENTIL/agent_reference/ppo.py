@@ -6,7 +6,7 @@ from envs.util import running
 from agent_reference.model import AgentModule
 
 
-class Solution(object):
+class PPO(object):
     def __init__(self):
         self.env = None
         self.agent = AgentModule()
@@ -118,13 +118,23 @@ class Solution(object):
         advantage = norm_advantage.add_transform(advantage)
 
         for idx in (torch.randperm(1 * T_max) % T_max).reshape(-1, T_max):
-            (a_u, a_c) = agent.actor(mem["state"][:,idx])
-            value = agent.critic(mem["state"][:,idx])
+            # subject to change #
+            # (a_u, a_c) = agent.actor(mem["state"][:,idx])
+            # value = agent.critic(mem["state"][:,idx])
 
-            ## loss actor
-            prob_ratio = torch.exp(agent.log_prob((mem["a_u"][:,idx], mem["a_c"][:,idx]),
-                                                  (a_u, a_c), std_u, std_c).unsqueeze(-1) 
-                                   - mem["log_prob"][:,idx])
+            # ## loss actor
+            # prob_ratio = torch.exp(agent.log_prob((mem["a_u"][:,idx], mem["a_c"][:,idx]),
+            #                                       (a_u, a_c), std_u, std_c).unsqueeze(-1) 
+            #                        - mem["log_prob"][:,idx])
+            
+            value = agent.critic(mem["state"][:,idx])
+            prob_ratio = torch.exp(
+                 agent.evaluate_actions(
+                      mem["state"][:,idx],
+                      mem["a_u"][:,idx], mem["a_c"][:,idx],
+                      std_u, std_c
+            ).unsqueeze(-1) - mem["log_prob"][:,idx])
+            # ----------------- #
 
             loss_actor = -torch.minimum(prob_ratio * advantage[:, idx], 
                                         prob_ratio.clip(1 - epsilon, 1 + epsilon) 
