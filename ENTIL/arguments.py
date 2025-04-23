@@ -42,3 +42,7 @@ def get_args():
         type=int,
         default=64,
         help='number of hidden units in the actor and critic networks (default: 64)')
+
+    args = parser.parse_args()
+
+    return args
