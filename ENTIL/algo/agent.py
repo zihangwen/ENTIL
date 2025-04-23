@@ -9,9 +9,9 @@ from typing import Dict, Mapping, Optional, Tuple, Any, Union
 class AgentConfig:
     n_input_actor: int
     n_input_critic: int
-    n_hidden: int = 64
     n_action: int
     action_type: str = "Box" # "Discrete" or "Box" or "MultiBinary"
+    n_hidden: int = 64
         
 
 class AgentModule(nn.Module):
@@ -29,33 +29,33 @@ class AgentModule(nn.Module):
         else:
             raise NotImplementedError(f"Action type {cfg.action_type} not implemented")
 
-    # def forward(self, obs, action = True, value = True):
+    # def forward(self, state, action = True, value = True):
     #     a, v = None, None
     #     if action:
-    #         a = self.actor(obs)
+    #         a = self.actor(state)
     #     if value:
-    #         v = self.critic(obs)
+    #         v = self.critic(state)
     #     return a, v
     
-    def sample(self, obs, std = None, entropy = False):
-        act = self.actor(obs)
-        dist = self.dist(act, std)
+    def sample(self, state, std = None, entropy = False):
+        act_features = self.actor(state)
+        dist = self.dist(act_features, std)
         action = dist.sample()
         
         entropy = dist.entropy().detach()
         # entropy = -(a_c * torch.log(a_c + 1e-6)).sum(-1)
 
-        log_c = dist.log_prob(action)
-        return act, log_c.detach(), entropy
+        log_p = dist.log_prob(action).detach()
+        return action, log_p, entropy
     
     # def log_prob(self, action, action_mean, std = 0):
     #     dist = self.dist((1 - std) * action_mean + std / action_mean.shape[-1])
     #     return dist.log_prob(action)
 
-    def evaluate_actions(self, obs, action, std = None):
-        act = self.actor(obs)
-        dist = self.dist(act, std)
-        action_log_probs = dist.log_probs(action)
+    def evaluate_actions(self, state, action, std = None):
+        act_features = self.actor(state)
+        dist = self.dist(act_features, std)
+        action_log_probs = dist.log_prob(action)
         # dist_entropy = dist.entropy().mean()
 
         return action_log_probs
@@ -71,7 +71,6 @@ class DistModuleCategorical(nn.Module):
             nn.Linear(cfg.n_hidden, cfg.n_action),
             nn.Softmax(dim = -1)
         )
-        
         # self.out = nn.Linear(cfg.n_hidden, cfg.n_action)
 
     def forward(self, x, std):
@@ -91,12 +90,13 @@ class DistModuleGaussian(nn.Module):
             nn.Softmax(dim = -1)
         )
         # self.out = nn.Linear(cfg.n_hidden, cfg.n_action)
-        nn.init.orthogonal_(self.out.weight, gain=0.01)
+        nn.init.orthogonal_(self.out[0].weight, gain=0.01)
+        nn.init.constant_(self.out[0].bias, 0)
         
         self.logstd = nn.Parameter(torch.zeros(1, cfg.n_action))
 
     def forward(self, x, std = None):
-        fc_mean = self.linear(x)
+        fc_mean = self.out(x)
         if std is None:
             std = self.logstd.exp()
         return self.t_dist(fc_mean, std)
@@ -112,8 +112,8 @@ class Actor(nn.Module):
                                     nn.Linear(hidden, hidden), 
                                     nn.ReLU())
 
-    def forward(self, obs):
-        x = self.shared(obs)
+    def forward(self, state):
+        x = self.shared(state)
         return x
         # raise NotImplementedError("Please finish separating the actor module into discrete and continuous")
         # return [self.action_cont(x), self.action_disc(x)]
@@ -130,9 +130,8 @@ class Critic(nn.Module):
                                    nn.ReLU(),
                                    nn.Linear(hidden, 1))
         
-    def forward(self, obs):
-        x = obs.flatten(start_dim = -2)
-        return self.value(x)
+    def forward(self, state):
+        return self.value(state)
 
 
 # class AgentModuleDiscrete(AgentModuleBase):
@@ -140,8 +139,8 @@ class Critic(nn.Module):
 #         super().__init__(cfg)
 #         self.dist = torch.distributions.OneHotCategorical
 
-#     def sample(self, obs, std, entropy = False):
-#         a_c = self.actor(obs)
+#     def sample(self, state, std, entropy = False):
+#         a_c = self.actor(state)
 #         dist = self.dist((1 - std) * a_c + std / a_c.shape[-1])   
 #         a_c = dist.sample()
         
@@ -165,8 +164,8 @@ class Critic(nn.Module):
 #         super().__init__(cfg)
 #         self.dist = torch.distributions.Normal
 
-#     def sample(self, obs, std):
-#         a_u = self.actor(obs)
+#     def sample(self, state, std):
+#         a_u = self.actor(state)
 #         dist = self.dist(a_u, std)
 #         a_u = dist.sample()
         

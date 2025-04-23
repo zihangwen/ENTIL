@@ -1,101 +1,154 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Tuple, Any, Union
+from tqdm import tqdm
+
+from envs.util import running
+from algo.agent import AgentModule, AgentConfig
 
 
-@dataclass
-class PPOConfig:
-    clip_param: float = 0.2
-    ppo_epoch: int = 4
-    num_mini_batch: int = 32
-    value_loss_coef: float = 0.5
-    entropy_coef: float = 0.01
-    lr: float = 7e-4
-    eps: float = 1e-5
-    max_grad_norm: float = 0.5
-    use_clipped_value_loss: bool = True
+class PPO(object):
+    def __init__(self, env, agent):
+        self.env = env
+        self.agent = agent
+        self.optimizer = optim.Adam(self.agent.parameters(), lr=1e-3)
+        
+        self.training_config = None
+        self.game_config = None
+        self.hyper_config = None
 
+        self.norm_advantage = running()
+        self.norm_reward = running()
+        self.mse_loss = nn.HuberLoss(reduction='none')
+        
+    def wrapper(self, a, b):
+        return self.train_eval(a,b), self.idx, self.optimizer.state_dict(), self.norm_advantage, self.norm_reward
+    
+    def train_eval(self, n = 1, eval_period = 10):
+        results_train, results_eval = [], []
+        for i in tqdm(range(n), desc = "Training"):
+            if i % eval_period == 0:
+                results_eval += [self.evaluate()]
+            results_train += [self._train()]
+        
+        return results_train, results_eval
+    
+    def evaluate(self):
+        T_max = self.game_config['T_max']
+        
+        agent = self.agent
+        test_env = self.env
+        
+        obs = test_env.reset()
+        state = torch.cat(obs, dim = -1)
+        for t in range(T_max):
+            action, _, _ = agent.sample(state, std = 0)
+            # a_u, a_c = agent.actor(state)
+            # action = [a_u.detach(), nn.functional.one_hot(a_c.argmax(-1), num_classes=a_c.shape[-1])]
+            obs, test_reward, terminated, truncated, info = test_env.step(action.numpy())
+            state = torch.cat(obs, dim = -1)
+            
+        return test_reward.mean().item()
 
-class PPO():
-    def __init__(self, actor_critic, cfg: PPOConfig):
-        self.actor_critic = actor_critic
-        self.cfg = cfg
+    def train(self, n = 1):
+        results_train = []
+        for i in tqdm(range(n), desc = "Training"):
+            results_train += [self._train()]
+        return results_train
+          
+    def _train(self):
+        gamma = self.training_config['gamma'] 
+        std_u = self.training_config['std_u'] 
+        epsilon = self.training_config['epsilon'] 
+        c_entropy = self.training_config['c_entropy']
+        
+        T_max = self.game_config['T_max']
+        n_games = self.game_config['N_games']
+        
+        std_c = self.hyper_config['std_c']
 
-        self.clip_param = cfg.clip_param
-        self.ppo_epoch = cfg.ppo_epoch
-        self.num_mini_batch = cfg.num_mini_batch
-        self.value_loss_coef = cfg.value_loss_coef
-        self.entropy_coef = cfg.entropy_coef
-        self.lr = cfg.lr
-        self.eps = cfg.eps
-        self.max_grad_norm = cfg.max_grad_norm
-        self.use_clipped_value_loss = cfg.use_clipped_value_loss
+        agent = self.agent
+        optimizer = self.optimizer
+        env = self.env
 
-        self.optimizer = optim.Adam(actor_critic.parameters(), lr=cfg.lr, eps=cfg.eps)
+        mem = {
+            "state" : torch.zeros(n_games, T_max + 1, agent.cfg.n_input_actor),
+            "action" : torch.zeros(n_games, T_max, agent.cfg.n_action),
+            "reward" : torch.zeros(n_games, T_max, 1),
+            "log_prob" : torch.zeros(n_games, T_max, 1)
+        }
 
-    def update(self, rollouts):
-        advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
-        advantages = (advantages - advantages.mean()) / (
-            advantages.std() + self.eps)
+        norm_advantage = self.norm_advantage
+        norm_reward  = self.norm_reward
 
-        value_loss_epoch = 0
-        action_loss_epoch = 0
-        dist_entropy_epoch = 0
+        mse_loss = self.mse_loss
 
-        for e in range(self.ppo_epoch):
-            if self.actor_critic.is_recurrent:
-                data_generator = rollouts.recurrent_generator(
-                    advantages, self.num_mini_batch)
-            else:
-                data_generator = rollouts.feed_forward_generator(
-                    advantages, self.num_mini_batch)
+        ##############################################################################
+        obs, info = env.reset()
+        state = torch.tensor(obs, dtype=torch.float32)
+        mem["state"][:,0] = state
+        for t in range(T_max):
+            action, log_prob, entropy = agent.sample(state, std_u, std_c)
+            obs, reward, terminated, truncated, info = env.step(action.numpy())
 
-            for sample in data_generator:
-                obs_batch, recurrent_hidden_states_batch, actions_batch, \
-                   value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, \
-                        adv_targ = sample
+            state = torch.tensor(obs, dtype=torch.float32)
+            mem["state"][:,t + 1] = state
 
-                # Reshape to do in a single forward pass for all steps
-                values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
-                    obs_batch, recurrent_hidden_states_batch, masks_batch,
-                    actions_batch)
+            mem["action"][:,t] = action
 
-                ratio = torch.exp(action_log_probs -
-                                  old_action_log_probs_batch)
-                surr1 = ratio * adv_targ
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_param,
-                                    1.0 + self.clip_param) * adv_targ
-                action_loss = -torch.min(surr1, surr2).mean()
+            mem["log_prob"][:,t] = log_prob.sum(-1).unsqueeze(-1)
+            mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1) - c_entropy * entropy).mean(-1, keepdim = True) 
 
-                if self.use_clipped_value_loss:
-                    value_pred_clipped = value_preds_batch + \
-                        (values - value_preds_batch).clamp(-self.clip_param, self.clip_param)
-                    value_losses = (values - return_batch).pow(2)
-                    value_losses_clipped = (
-                        value_pred_clipped - return_batch).pow(2)
-                    value_loss = 0.5 * torch.max(value_losses,
-                                                 value_losses_clipped).mean()
-                else:
-                    value_loss = 0.5 * (return_batch - values).pow(2).mean()
+        ##############################################################################
+        v_old = agent.critic((mem["state"])).detach()
+        v_target = v_old.clone()
 
-                self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
-                 dist_entropy * self.entropy_coef).backward()
-                nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
-                                         self.max_grad_norm)
-                self.optimizer.step()
+        for t in reversed(range(T_max)):
+            v_target[:,t] = mem["reward"][:,t] + gamma * v_target[:,t + 1]
 
-                value_loss_epoch += value_loss.item()
-                action_loss_epoch += action_loss.item()
-                dist_entropy_epoch += dist_entropy.item()
+        ##############################################################################
+        norm_reward.add(v_target)
+        r_togo = norm_reward.rescale(mem["reward"])
 
-        num_updates = self.ppo_epoch * self.num_mini_batch
+        for t in reversed(range(T_max)):
+            v_target[:,t] = r_togo[:,t] + gamma * v_target[:,t + 1]
 
-        value_loss_epoch /= num_updates
-        action_loss_epoch /= num_updates
-        dist_entropy_epoch /= num_updates
+        ##############################################################################
+        advantage = (v_target - v_old) # .unsqueeze(2)
+        advantage = norm_advantage.add_transform(advantage)
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        for idx in (torch.randperm(1 * T_max) % T_max).reshape(-1, T_max):
+            # subject to change #
+            # (a_u, a_c) = agent.actor(mem["state"][:,idx])
+            # value = agent.critic(mem["state"][:,idx])
+
+            # ## loss actor
+            # prob_ratio = torch.exp(agent.log_prob((mem["a_u"][:,idx], mem["a_c"][:,idx]),
+            #                                       (a_u, a_c), std_u, std_c).unsqueeze(-1) 
+            #                        - mem["log_prob"][:,idx])
+            
+            value = agent.critic(mem["state"][:,idx])
+            prob_ratio = torch.exp(
+                 agent.evaluate_actions(
+                      mem["state"][:,idx], mem["action"][:,idx],
+                      std_c
+            ).sum(-1).unsqueeze(-1) - mem["log_prob"][:,idx])
+            # ----------------- #
+
+            loss_actor = -torch.minimum(prob_ratio * advantage[:, idx], 
+                                        prob_ratio.clip(1 - epsilon, 1 + epsilon) 
+                                        * advantage[:, idx]).mean()
+
+            ## loss critic
+            v_clip = value.clip(v_old[:, idx] - epsilon, v_old[:, idx] + epsilon)
+            loss_critic = torch.maximum(mse_loss(value, v_target[:, idx]),
+                                        mse_loss(v_clip, v_target[:, idx])).mean()
+
+            ## total loss
+            loss = loss_actor + loss_critic
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        return reward.mean().item()
