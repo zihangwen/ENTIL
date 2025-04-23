@@ -2,6 +2,7 @@
 import sys
 import time
 import os
+from pathlib import Path
 
 import numpy as np
 # import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # %%
 n_games = 16
-c_entropy = 0.5
+c_entropy = 0
 
 # %%
 game_config = {
@@ -32,7 +33,6 @@ game_config = {
 
 training_config = {
     'gamma' : 0.95,
-    'std_u' : 0.1,
     'epsilon' : 0.1,
     'c_entropy': c_entropy
 }
@@ -61,11 +61,18 @@ agent = AgentModule(cfg)
 algo = PPO(envs, agent)
 algo.training_config = training_config
 algo.game_config = game_config
-algo.hyper_config = {'std_c' : 0.1}
+algo.hyper_config = {'std_c' : None} # 0.1
+
 # %%
 reward_training = algo.train(30000)
 
 # %%
-with open("reward_training.pkl", "wb") as f:
+out_dir = Path("results")
+os.makedirs(out_dir, exist_ok=True)
+
+with open(out_dir / "reward_training.pkl", "wb") as f:
     pickle.dump(reward_training, f)
+
+torch.save(algo.agent.state_dict(), out_dir / "ppo_agent.pt")
+
 # %%

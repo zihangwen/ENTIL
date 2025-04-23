@@ -37,7 +37,7 @@ class AgentModule(nn.Module):
     #         v = self.critic(state)
     #     return a, v
     
-    def sample(self, state, std = None, entropy = False):
+    def sample(self, state, std = None):
         act_features = self.actor(state)
         dist = self.dist(act_features, std)
         action = dist.sample()
@@ -56,9 +56,9 @@ class AgentModule(nn.Module):
         act_features = self.actor(state)
         dist = self.dist(act_features, std)
         action_log_probs = dist.log_prob(action)
-        # dist_entropy = dist.entropy().mean()
+        dist_entropy = dist.entropy().mean()
 
-        return action_log_probs
+        return action_log_probs, dist_entropy
 
 
 class DistModuleCategorical(nn.Module):

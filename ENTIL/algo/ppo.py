@@ -58,7 +58,6 @@ class PPO(object):
           
     def _train(self):
         gamma = self.training_config['gamma'] 
-        std_u = self.training_config['std_u'] 
         epsilon = self.training_config['epsilon'] 
         c_entropy = self.training_config['c_entropy']
         
@@ -88,7 +87,7 @@ class PPO(object):
         state = torch.tensor(obs, dtype=torch.float32)
         mem["state"][:,0] = state
         for t in range(T_max):
-            action, log_prob, entropy = agent.sample(state, std_u, std_c)
+            action, log_prob, entropy = agent.sample(state, std_c)
             obs, reward, terminated, truncated, info = env.step(action.numpy())
 
             state = torch.tensor(obs, dtype=torch.float32)
@@ -128,11 +127,11 @@ class PPO(object):
             #                        - mem["log_prob"][:,idx])
             
             value = agent.critic(mem["state"][:,idx])
-            prob_ratio = torch.exp(
-                 agent.evaluate_actions(
-                      mem["state"][:,idx], mem["action"][:,idx],
-                      std_c
-            ).sum(-1).unsqueeze(-1) - mem["log_prob"][:,idx])
+            action_log_probs, _ = agent.evaluate_actions(
+                mem["state"][:,idx], mem["action"][:,idx],
+                std_c
+            )
+            prob_ratio = torch.exp(action_log_probs.sum(-1).unsqueeze(-1) - mem["log_prob"][:,idx])
             # ----------------- #
 
             loss_actor = -torch.minimum(prob_ratio * advantage[:, idx], 
