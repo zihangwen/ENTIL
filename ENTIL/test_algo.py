@@ -17,24 +17,41 @@ import gymnasium as gym
 from algo.wrapper import *
 from algo.agent import AgentConfig, AgentModule
 from algo.ppo import PPO
+from arguments import get_args
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # %%
-n_games = 16
-c_entropy = 0
+args = get_args()
+game_name = args.env_name
+n_games = args.num_envs
+entropy_coef = args.entropy_coef
+out_dir = Path(args.out_dir)
+T_max = args.T_max
+gamma = args.gamma
+epsilon = args.epsilon
+n_hidden = args.n_hidden
+
+# game_name = "HalfCheetah-v5"
+# n_games = 16
+# entropy_coef = 0
+# out_dir = Path("results")
+# T_max = 1000
+# gamma = 0.95
+# epsilon = 0.1
+# n_hidden = 64
 
 # %%
 game_config = {
-    'T_max' : 1000,
+    'T_max' : T_max,
     'N_games' : n_games,
-    'game_name' : "HalfCheetah-v5",
+    'game_name' : game_name,
 }
 
 training_config = {
-    'gamma' : 0.95,
-    'epsilon' : 0.1,
-    'c_entropy': c_entropy
+    'gamma' : gamma,
+    'epsilon' : epsilon,
+    'entropy_coef': entropy_coef
 }
 
 # %%
@@ -67,7 +84,6 @@ algo.hyper_config = {'std_c' : None} # 0.1
 reward_training = algo.train(30000)
 
 # %%
-out_dir = Path("results")
 os.makedirs(out_dir, exist_ok=True)
 
 with open(out_dir / "reward_training.pkl", "wb") as f:

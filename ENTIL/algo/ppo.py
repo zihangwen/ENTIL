@@ -59,7 +59,7 @@ class PPO(object):
     def _train(self):
         gamma = self.training_config['gamma'] 
         epsilon = self.training_config['epsilon'] 
-        c_entropy = self.training_config['c_entropy']
+        entropy_coef = self.training_config['entropy_coef']
         
         T_max = self.game_config['T_max']
         n_games = self.game_config['N_games']
@@ -96,7 +96,7 @@ class PPO(object):
             mem["action"][:,t] = action
 
             mem["log_prob"][:,t] = log_prob.sum(-1).unsqueeze(-1)
-            mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1) - c_entropy * entropy).mean(-1, keepdim = True) 
+            mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1) - entropy_coef * entropy).mean(-1, keepdim = True) 
 
         ##############################################################################
         v_old = agent.critic((mem["state"])).detach()
