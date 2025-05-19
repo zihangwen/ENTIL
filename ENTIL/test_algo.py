@@ -28,6 +28,7 @@ n_games = args.num_envs
 entropy_coef = args.entropy_coef
 out_dir = Path(args.out_dir)
 T_max = args.T_max
+n_epochs = args.n_epochs
 gamma = args.gamma
 epsilon = args.epsilon
 n_hidden = args.n_hidden
@@ -81,7 +82,7 @@ algo.game_config = game_config
 algo.hyper_config = {'std_c' : None} # 0.1
 
 # %%
-reward_training = algo.train(30000)
+reward_training = algo.train(n_epochs)
 
 # %%
 os.makedirs(out_dir, exist_ok=True)

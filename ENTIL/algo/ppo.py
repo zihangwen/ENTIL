@@ -84,11 +84,15 @@ class PPO(object):
 
         ##############################################################################
         obs, info = env.reset()
+        ep_ret, ep_len = 0, 0
+
         state = torch.tensor(obs, dtype=torch.float32)
         mem["state"][:,0] = state
         for t in range(T_max):
             action, log_prob, entropy = agent.sample(state, std_c)
             obs, reward, terminated, truncated, info = env.step(action.numpy())
+            ep_ret += reward
+            ep_len += 1
 
             state = torch.tensor(obs, dtype=torch.float32)
             mem["state"][:,t + 1] = state
@@ -150,4 +154,4 @@ class PPO(object):
             loss.backward()
             optimizer.step()
 
-        return reward.mean().item()
+        return ep_ret
