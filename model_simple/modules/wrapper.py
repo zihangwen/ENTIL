@@ -145,13 +145,13 @@ class Pop_wrapper(object):
                 self.pop.mutate(n_birth)
     
         ### add mutations 
-            new_mut_cnt = 0 
-            for cid in list(self.clone_to_sol.keys()):
-                if cid not in self.pop.clones:
-                    self.open[self.clone_to_sol[cid]] = True
-                    self.clone_to_sol.pop(cid)
-                    self.clone_to_hyp.pop(cid)
-                    new_mut_cnt += 1
+        new_mut_cnt = 0 
+        for cid in list(self.clone_to_sol.keys()):
+            if cid not in self.pop.clones:
+                self.open[self.clone_to_sol[cid]] = True
+                self.clone_to_sol.pop(cid)
+                self.clone_to_hyp.pop(cid)
+                new_mut_cnt += 1
         
         ### assign to sol
         temp = np.random.choice(self.sol_pool[self.open], new_mut_cnt, replace = False)
