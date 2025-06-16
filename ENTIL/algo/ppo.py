@@ -2,10 +2,31 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
+import pickle
+from pathlib import Path
 
 from envs.util import running
 # from algo.agent import AgentModule, AgentConfig
 from algo.util import discount_cumsum
+
+
+class Logger(object):
+    def __init__(self, *keys):
+        self._logs = {key: [] for key in keys}
+
+    def add(self, key, value):
+        if key in self._logs:
+            self._logs[key].append(value)
+        else:
+            raise KeyError(f"Key '{key}' not found in logger.")
+
+    def get_logs(self):
+        return self._logs
+    
+    def save_logs(self, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'wb') as f:
+            pickle.dump(self._logs, f)
 
 
 class PPO(object):
@@ -18,6 +39,9 @@ class PPO(object):
         #     lr=3e-4
         # )
         # self.c_optimizer = optim.Adam(self.agent.critic.parameters(), lr=1e-3)
+        self.logger = Logger(
+            "AverageEpRet", "StdEpRet", "EpLen", "NEnv", "AverageVVals", "StdVVals", "KL"
+        )
         
         self.training_config = None
         self.game_config = None
@@ -56,20 +80,22 @@ class PPO(object):
             
     #     return test_reward.mean().item()
 
-    def train(self, n = 1):
+    def train(self, n : int = 1):
         torch.manual_seed(10000)
         # np.random.seed(seed)
-        results_train = []
         for i in tqdm(range(n), desc = "Training"):
-            results_train += [self._train()]
-        return results_train
+            self._train()
+        
+        return self.logger
           
     def _train(self):
         gamma = self.training_config['gamma'] 
-        epsilon = self.training_config['epsilon'] 
+        epsilon = self.training_config['epsilon']
+        lam = self.training_config['lam']
+        target_kl = self.training_config['target_kl']
         # entropy_coef = self.training_config['entropy_coef']
-        lam = 0.95
-        target_kl=0.01
+        train_v_iters = self.training_config['train_v_iters']
+        train_a_iters = self.training_config['train_a_iters']
 
         T_max = self.game_config['T_max']
         n_games = self.game_config['N_games']
@@ -95,7 +121,7 @@ class PPO(object):
         # mse_loss = self.mse_loss
 
         ##############################################################################
-        obs, info = env.reset()
+        obs, _ = env.reset()
         ep_ret, ep_len = 0, 0
 
         state = torch.tensor(obs, dtype=torch.float32)
@@ -132,15 +158,16 @@ class PPO(object):
         # ##############################################################################
         # advantage = (v_target - v_old) # .unsqueeze(2)
         # advantage = norm_advantage.add_transform(advantage)
+
         vals = agent.critic((mem["state"])).detach()
         rews = torch.cat([mem["reward"], vals[:,-1].unsqueeze(-1)], dim=1)
         deltas = rews[:,:-1] + gamma * vals[:,1:] - vals[:,:-1]
         adv_buf = discount_cumsum(deltas, gamma * lam)
         advantage = (adv_buf - adv_buf.mean()) / (adv_buf.std())
-        
         ret_buf = discount_cumsum(rews, gamma)[:,:-1]
 
-        for _ in range(80):
+        # ----------------- #
+        for _ in range(train_a_iters):
             action_log_probs, _ = agent.evaluate_actions(
                 mem["state"][:,:-1], mem["action"]
             )
@@ -159,7 +186,7 @@ class PPO(object):
             optimizer.step()
         
         # ----------------- #
-        for _ in range(80):
+        for _ in range(train_v_iters):
             ## loss critic
             value = agent.critic(mem["state"][:,:-1])
             # v_clip = value.clip(v_old - epsilon, v_old + epsilon)
@@ -170,5 +197,11 @@ class PPO(object):
             optimizer.zero_grad()
             loss_critic.backward()
             optimizer.step()
-        # print(ep_ret, vals.mean().item())
-        return ep_ret
+
+        self.logger.add("AverageEpRet", ep_ret.mean().item())
+        self.logger.add("StdEpRet", ep_ret.std().item())
+        self.logger.add("EpLen", ep_len)
+        self.logger.add("NEnv", n_games)
+        self.logger.add("AverageVVals", vals.mean().item())
+        self.logger.add("StdVVals", vals.std().item())
+        self.logger.add("KL", approx_kl)

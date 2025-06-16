@@ -19,7 +19,7 @@ from algo.agent import AgentConfig, AgentModule
 from algo.ppo import PPO
 # from arguments import get_args
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # %%
 # args = get_args()
@@ -31,6 +31,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # n_epochs = args.n_epochs
 # gamma = args.gamma
 # epsilon = args.epsilon
+# lam = args.lam
+# target_kl = args.target_kl
+# train_a_iters = args.train_a_iters
+# train_v_iters = args.train_v_iters
 # n_hidden = args.n_hidden
 
 game_name = "HalfCheetah-v5"
@@ -42,6 +46,10 @@ n_epochs = 250
 gamma = 0.99
 epsilon = 0.2
 n_hidden = 64
+lam = 0.95
+target_kl = 0.01
+train_a_iters = 80
+train_v_iters = 80
 
 # %%
 game_config = {
@@ -53,7 +61,11 @@ game_config = {
 training_config = {
     'gamma' : gamma,
     'epsilon' : epsilon,
-    'entropy_coef': entropy_coef
+    # 'entropy_coef': entropy_coef,
+    'lam' : lam,
+    'target_kl' : target_kl,
+    'train_a_iters' : train_a_iters,
+    'train_v_iters' : train_v_iters,
 }
 
 # %%
@@ -80,17 +92,18 @@ agent = AgentModule(cfg)
 algo = PPO(envs, agent)
 algo.training_config = training_config
 algo.game_config = game_config
-algo.hyper_config = {'std_c' : None} # 0.1
+# algo.hyper_config = {'std_c' : None} # 0.1
 
 # %%
-reward_training = algo.train(n_epochs)
-
-# %%
-os.makedirs(out_dir, exist_ok=True)
-
-with open(out_dir / "reward_training.pkl", "wb") as f:
-    pickle.dump(reward_training, f)
-
+logger = algo.train(n_epochs)
+logger.save_logs(out_dir / "logger.pkl")
 torch.save(algo.agent.state_dict(), out_dir / "ppo_agent.pt")
+
+# %%
+# os.makedirs(out_dir, exist_ok=True)
+
+# with open(out_dir / "reward_training.pkl", "wb") as f:
+#     pickle.dump(reward_training, f)
+
 
 # %%

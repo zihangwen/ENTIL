@@ -43,6 +43,26 @@ def get_args():
         default=0.1,
         help='epsilon for epsilon-greedy action selection (default: 0.1)')
     parser.add_argument(
+        '--lam',
+        type=float,
+        default=0.97,
+        help='lam Lambda for GAE-Lambda. (Always between 0 and 1, close to 1.)')
+    parser.add_argument(
+        '--target-kl',
+        type=float,
+        default=0.01,
+        help='Roughly what KL divergence we think is appropriate between new and old policies after an update. This will get used for early stopping. (Usually small, 0.01 or 0.05.)')
+    parser.add_argument(
+        '--train-a-iters',
+        type=int,
+        default=80,
+        help='Maximum number of gradient descent steps to take on policy loss per epoch. (Early stopping may cause optimizer to take fewer than this.)')
+    parser.add_argument(
+        '--train-v-iters',
+        type=int,
+        default=80,
+        help='Number of gradient descent steps to take on value function per epoch.')
+    parser.add_argument(
         '--n-hidden',
         type=int,
         default=64,
