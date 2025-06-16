@@ -14,10 +14,10 @@ import torch.optim as optim
 
 import gymnasium as gym
 
-from algo.wrapper import *
+# from algo.wrapper import *
 from algo.agent import AgentConfig, AgentModule
 from algo.ppo import PPO
-from arguments import get_args
+# from arguments import get_args
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -36,7 +36,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 game_name = "HalfCheetah-v5"
 n_games = 4
 entropy_coef = 0
-out_dir = Path("../data/ENTIL_4")
+out_dir = Path("../data/ENTIL/game_name")
 T_max = 1000
 n_epochs = 250
 gamma = 0.99

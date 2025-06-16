@@ -58,7 +58,7 @@ class AgentModule(nn.Module):
         action_log_probs = dist.log_prob(action)
         dist_entropy = dist.entropy().mean()
 
-        return action_log_probs, dist_entropy
+        return action_log_probs.sum(axis=-1), dist_entropy
 
 
 class DistModuleCategorical(nn.Module):

@@ -4,7 +4,8 @@ import torch.optim as optim
 from tqdm import tqdm
 
 from envs.util import running
-from algo.agent import AgentModule, AgentConfig
+# from algo.agent import AgentModule, AgentConfig
+from algo.util import discount_cumsum
 
 
 class PPO(object):
@@ -12,45 +13,52 @@ class PPO(object):
         self.env = env
         self.agent = agent
         self.optimizer = optim.Adam(self.agent.parameters(), lr=1e-3)
+        # self.a_optimizer = optim.Adam(
+        #     list(self.agent.actor.parameters()) + list(self.agent.dist.parameters()),
+        #     lr=3e-4
+        # )
+        # self.c_optimizer = optim.Adam(self.agent.critic.parameters(), lr=1e-3)
         
         self.training_config = None
         self.game_config = None
         self.hyper_config = None
 
-        self.norm_advantage = running()
-        self.norm_reward = running()
-        self.mse_loss = nn.HuberLoss(reduction='none')
+        # self.norm_advantage = running()
+        # self.norm_reward = running()
+        # self.mse_loss = nn.HuberLoss(reduction='none')
         
-    def wrapper(self, a, b):
-        return self.train_eval(a,b), self.idx, self.optimizer.state_dict(), self.norm_advantage, self.norm_reward
+    # def wrapper(self, a, b):
+    #     return self.train_eval(a,b), self.idx, self.optimizer.state_dict(), self.norm_advantage, self.norm_reward
     
-    def train_eval(self, n = 1, eval_period = 10):
-        results_train, results_eval = [], []
-        for i in tqdm(range(n), desc = "Training"):
-            if i % eval_period == 0:
-                results_eval += [self.evaluate()]
-            results_train += [self._train()]
+    # def train_eval(self, n = 1, eval_period = 10):
+    #     results_train, results_eval = [], []
+    #     for i in tqdm(range(n), desc = "Training"):
+    #         if i % eval_period == 0:
+    #             results_eval += [self.evaluate()]
+    #         results_train += [self._train()]
         
-        return results_train, results_eval
+    #     return results_train, results_eval
     
-    def evaluate(self):
-        T_max = self.game_config['T_max']
+    # def evaluate(self):
+    #     T_max = self.game_config['T_max']
         
-        agent = self.agent
-        test_env = self.env
+    #     agent = self.agent
+    #     test_env = self.env
         
-        obs = test_env.reset()
-        state = torch.cat(obs, dim = -1)
-        for t in range(T_max):
-            action, _, _ = agent.sample(state, std = 0)
-            # a_u, a_c = agent.actor(state)
-            # action = [a_u.detach(), nn.functional.one_hot(a_c.argmax(-1), num_classes=a_c.shape[-1])]
-            obs, test_reward, terminated, truncated, info = test_env.step(action.numpy())
-            state = torch.cat(obs, dim = -1)
+    #     obs = test_env.reset()
+    #     state = torch.cat(obs, dim = -1)
+    #     for t in range(T_max):
+    #         action, _, _ = agent.sample(state, std = 0)
+    #         # a_u, a_c = agent.actor(state)
+    #         # action = [a_u.detach(), nn.functional.one_hot(a_c.argmax(-1), num_classes=a_c.shape[-1])]
+    #         obs, test_reward, terminated, truncated, info = test_env.step(action.numpy())
+    #         state = torch.cat(obs, dim = -1)
             
-        return test_reward.mean().item()
+    #     return test_reward.mean().item()
 
     def train(self, n = 1):
+        torch.manual_seed(10000)
+        # np.random.seed(seed)
         results_train = []
         for i in tqdm(range(n), desc = "Training"):
             results_train += [self._train()]
@@ -60,6 +68,7 @@ class PPO(object):
         gamma = self.training_config['gamma'] 
         epsilon = self.training_config['epsilon'] 
         # entropy_coef = self.training_config['entropy_coef']
+        lam = 0.95
         target_kl=0.01
 
         T_max = self.game_config['T_max']
@@ -69,22 +78,24 @@ class PPO(object):
 
         agent = self.agent
         optimizer = self.optimizer
+        # a_optimizer = self.a_optimizer
+        # c_optimizer = self.c_optimizer
         env = self.env
 
         mem = {
             "state" : torch.zeros(n_games, T_max + 1, agent.cfg.n_input_actor),
             "action" : torch.zeros(n_games, T_max, agent.cfg.n_action),
             "reward" : torch.zeros(n_games, T_max, 1),
-            "log_prob" : torch.zeros(n_games, T_max, 1)
+            "log_prob" : torch.zeros(n_games, T_max, 1),
         }
 
-        norm_advantage = self.norm_advantage
-        norm_reward  = self.norm_reward
+        # norm_advantage = self.norm_advantage
+        # norm_reward  = self.norm_reward
 
-        mse_loss = self.mse_loss
+        # mse_loss = self.mse_loss
 
         ##############################################################################
-        obs, _ = env.reset()
+        obs, info = env.reset()
         ep_ret, ep_len = 0, 0
 
         state = torch.tensor(obs, dtype=torch.float32)
@@ -102,57 +113,62 @@ class PPO(object):
 
             mem["log_prob"][:,t] = log_prob.sum(-1).unsqueeze(-1)
             # mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1) - entropy_coef * entropy).mean(-1, keepdim = True)
-            mem["reward"][:,t] = torch.tensor(reward, dtype=torch.float32).unsqueeze(-1)
+            mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1)).mean(-1, keepdim = True)
 
-        ##############################################################################
-        v_old = agent.critic((mem["state"])).detach()
-        v_target = v_old.clone()
+        # ##############################################################################
+        # v_old = agent.critic((mem["state"])).detach()
+        # v_target = v_old.clone()
 
-        for t in reversed(range(T_max)):
-            v_target[:,t] = mem["reward"][:,t] + gamma * v_target[:,t + 1]
+        # for t in reversed(range(T_max)):
+        #     v_target[:,t] = mem["reward"][:,t] + gamma * v_target[:,t + 1]
 
-        ##############################################################################
-        norm_reward.add(v_target)
-        r_togo = norm_reward.rescale(mem["reward"])
+        # ##############################################################################
+        # norm_reward.add(v_target)
+        # r_togo = norm_reward.rescale(mem["reward"])
 
-        for t in reversed(range(T_max)):
-            v_target[:,t] = r_togo[:,t] + gamma * v_target[:,t + 1]
+        # for t in reversed(range(T_max)):
+        #     v_target[:,t] = r_togo[:,t] + gamma * v_target[:,t + 1]
 
-        ##############################################################################
-        advantage = (v_target - v_old) # .unsqueeze(2)
-        advantage = norm_advantage.add_transform(advantage)
+        # ##############################################################################
+        # advantage = (v_target - v_old) # .unsqueeze(2)
+        # advantage = norm_advantage.add_transform(advantage)
+        vals = agent.critic((mem["state"])).detach()
+        rews = torch.cat([mem["reward"], vals[:,-1].unsqueeze(-1)], dim=1)
+        deltas = rews[:,:-1] + gamma * vals[:,1:] - vals[:,:-1]
+        adv_buf = discount_cumsum(deltas, gamma * lam)
+        advantage = (adv_buf - adv_buf.mean()) / (adv_buf.std())
         
-        for _ in range(80):            
+        ret_buf = discount_cumsum(rews, gamma)[:,:-1]
+
+        for _ in range(80):
             action_log_probs, _ = agent.evaluate_actions(
                 mem["state"][:,:-1], mem["action"]
             )
-            delta_log_probs = action_log_probs.sum(-1).unsqueeze(-1) - mem["log_prob"]
+            delta_log_probs = action_log_probs.unsqueeze(-1) - mem["log_prob"]
             prob_ratio = torch.exp(delta_log_probs)
             approx_kl = - delta_log_probs.mean().item()
 
             if approx_kl > 1.5 * target_kl:
                 break
-            # ----------------- #
-            loss_actor = -torch.minimum(prob_ratio * advantage[:,:-1], 
+
+            loss_actor = -torch.minimum(prob_ratio * advantage, 
                                         prob_ratio.clip(1 - epsilon, 1 + epsilon) 
-                                        * advantage[:,:-1]).mean()
-            
+                                        * advantage).mean()
             optimizer.zero_grad()
             loss_actor.backward()
             optimizer.step()
-
+        
+        # ----------------- #
         for _ in range(80):
             ## loss critic
             value = agent.critic(mem["state"][:,:-1])
-            # v_clip = value.clip(v_old[:,:-1] - epsilon, v_old[:,:-1] + epsilon)
-            # loss_critic = torch.maximum(mse_loss(value, v_target[:,:-1]),
-            #                             mse_loss(v_clip, v_target[:,:-1])).mean()
-            loss_critic = ((value - v_target[:,:-1]) ** 2).mean()
+            # v_clip = value.clip(v_old - epsilon, v_old + epsilon)
+            # loss_critic = torch.maximum(mse_loss(value, ret_buf),
+            #                             mse_loss(v_clip, ret_buf)).mean()
+            loss_critic = ((value - ret_buf) ** 2).mean()
 
-            ## total loss
             optimizer.zero_grad()
             loss_critic.backward()
             optimizer.step()
-
-        print(ep_ret, v_old.mean().item())
+        print(ep_ret, vals.mean().item())
         return ep_ret
