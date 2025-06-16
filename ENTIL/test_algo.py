@@ -22,25 +22,26 @@ from arguments import get_args
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # %%
-args = get_args()
-game_name = args.env_name
-n_games = args.num_envs
-entropy_coef = args.entropy_coef
-out_dir = Path(args.out_dir)
-T_max = args.T_max
-n_epochs = args.n_epochs
-gamma = args.gamma
-epsilon = args.epsilon
-n_hidden = args.n_hidden
+# args = get_args()
+# game_name = args.env_name
+# n_games = args.num_envs
+# entropy_coef = args.entropy_coef
+# out_dir = Path(args.out_dir)
+# T_max = args.T_max
+# n_epochs = args.n_epochs
+# gamma = args.gamma
+# epsilon = args.epsilon
+# n_hidden = args.n_hidden
 
-# game_name = "HalfCheetah-v5"
-# n_games = 16
-# entropy_coef = 0
-# out_dir = Path("results")
-# T_max = 1000
-# gamma = 0.95
-# epsilon = 0.1
-# n_hidden = 64
+game_name = "HalfCheetah-v5"
+n_games = 4
+entropy_coef = 0
+out_dir = Path("../data/ENTIL_4")
+T_max = 1000
+n_epochs = 250
+gamma = 0.99
+epsilon = 0.2
+n_hidden = 64
 
 # %%
 game_config = {

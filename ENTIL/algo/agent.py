@@ -87,13 +87,13 @@ class DistModuleGaussian(nn.Module):
         self.t_dist = torch.distributions.Normal
         self.out = nn.Sequential(
             nn.Linear(cfg.n_hidden, cfg.n_action),
-            nn.Softmax(dim = -1)
+            nn.Identity()
         )
         # self.out = nn.Linear(cfg.n_hidden, cfg.n_action)
-        nn.init.orthogonal_(self.out[0].weight, gain=0.01)
-        nn.init.constant_(self.out[0].bias, 0)
+        # nn.init.orthogonal_(self.out[0].weight, gain=0.01)
+        # nn.init.constant_(self.out[0].bias, 0)
         
-        self.logstd = nn.Parameter(torch.zeros(1, cfg.n_action))
+        self.logstd = nn.Parameter(-0.5 * torch.ones(1, cfg.n_action))
 
     def forward(self, x, std = None):
         fc_mean = self.out(x)
@@ -108,9 +108,9 @@ class Actor(nn.Module):
         self.cfg = cfg
         hidden = cfg.n_hidden
         self.shared = nn.Sequential(nn.Linear(cfg.n_input_actor, hidden),
-                                    nn.ReLU(),
+                                    nn.Tanh(),
                                     nn.Linear(hidden, hidden), 
-                                    nn.ReLU())
+                                    nn.Tanh())
 
     def forward(self, state):
         x = self.shared(state)
@@ -125,10 +125,11 @@ class Critic(nn.Module):
         self.cfg = cfg
         hidden = cfg.n_hidden
         self.value = nn.Sequential(nn.Linear(cfg.n_input_critic, hidden),
-                                   nn.ReLU(),
+                                   nn.Tanh(),
                                    nn.Linear(hidden, hidden), 
-                                   nn.ReLU(),
-                                   nn.Linear(hidden, 1))
+                                   nn.Tanh(),
+                                   nn.Linear(hidden, 1),
+                                   nn.Identity())
         
     def forward(self, state):
         return self.value(state)

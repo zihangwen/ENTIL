@@ -59,12 +59,13 @@ class PPO(object):
     def _train(self):
         gamma = self.training_config['gamma'] 
         epsilon = self.training_config['epsilon'] 
-        entropy_coef = self.training_config['entropy_coef']
-        
+        # entropy_coef = self.training_config['entropy_coef']
+        target_kl=0.01
+
         T_max = self.game_config['T_max']
         n_games = self.game_config['N_games']
         
-        std_c = self.hyper_config['std_c']
+        # std_c = self.hyper_config['std_c']
 
         agent = self.agent
         optimizer = self.optimizer
@@ -83,13 +84,13 @@ class PPO(object):
         mse_loss = self.mse_loss
 
         ##############################################################################
-        obs, info = env.reset()
+        obs, _ = env.reset()
         ep_ret, ep_len = 0, 0
 
         state = torch.tensor(obs, dtype=torch.float32)
         mem["state"][:,0] = state
         for t in range(T_max):
-            action, log_prob, entropy = agent.sample(state, std_c)
+            action, log_prob, entropy = agent.sample(state)
             obs, reward, terminated, truncated, info = env.step(action.numpy())
             ep_ret += reward
             ep_len += 1
@@ -100,7 +101,8 @@ class PPO(object):
             mem["action"][:,t] = action
 
             mem["log_prob"][:,t] = log_prob.sum(-1).unsqueeze(-1)
-            mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1) - entropy_coef * entropy).mean(-1, keepdim = True) 
+            # mem["reward"][:,t] = (torch.tensor(reward, dtype=torch.float32).unsqueeze(-1) - entropy_coef * entropy).mean(-1, keepdim = True)
+            mem["reward"][:,t] = torch.tensor(reward, dtype=torch.float32).unsqueeze(-1)
 
         ##############################################################################
         v_old = agent.critic((mem["state"])).detach()
@@ -119,39 +121,38 @@ class PPO(object):
         ##############################################################################
         advantage = (v_target - v_old) # .unsqueeze(2)
         advantage = norm_advantage.add_transform(advantage)
-
-        for idx in (torch.randperm(1 * T_max) % T_max).reshape(-1, T_max):
-            # subject to change #
-            # (a_u, a_c) = agent.actor(mem["state"][:,idx])
-            # value = agent.critic(mem["state"][:,idx])
-
-            # ## loss actor
-            # prob_ratio = torch.exp(agent.log_prob((mem["a_u"][:,idx], mem["a_c"][:,idx]),
-            #                                       (a_u, a_c), std_u, std_c).unsqueeze(-1) 
-            #                        - mem["log_prob"][:,idx])
-            
-            value = agent.critic(mem["state"][:,idx])
+        
+        for _ in range(80):            
             action_log_probs, _ = agent.evaluate_actions(
-                mem["state"][:,idx], mem["action"][:,idx],
-                std_c
+                mem["state"][:,:-1], mem["action"]
             )
-            prob_ratio = torch.exp(action_log_probs.sum(-1).unsqueeze(-1) - mem["log_prob"][:,idx])
+            delta_log_probs = action_log_probs.sum(-1).unsqueeze(-1) - mem["log_prob"]
+            prob_ratio = torch.exp(delta_log_probs)
+            approx_kl = - delta_log_probs.mean().item()
+
+            if approx_kl > 1.5 * target_kl:
+                break
             # ----------------- #
-
-            loss_actor = -torch.minimum(prob_ratio * advantage[:, idx], 
+            loss_actor = -torch.minimum(prob_ratio * advantage[:,:-1], 
                                         prob_ratio.clip(1 - epsilon, 1 + epsilon) 
-                                        * advantage[:, idx]).mean()
-
-            ## loss critic
-            v_clip = value.clip(v_old[:, idx] - epsilon, v_old[:, idx] + epsilon)
-            loss_critic = torch.maximum(mse_loss(value, v_target[:, idx]),
-                                        mse_loss(v_clip, v_target[:, idx])).mean()
-
-            ## total loss
-            loss = loss_actor + loss_critic
-
+                                        * advantage[:,:-1]).mean()
+            
             optimizer.zero_grad()
-            loss.backward()
+            loss_actor.backward()
             optimizer.step()
 
+        for _ in range(80):
+            ## loss critic
+            value = agent.critic(mem["state"][:,:-1])
+            # v_clip = value.clip(v_old[:,:-1] - epsilon, v_old[:,:-1] + epsilon)
+            # loss_critic = torch.maximum(mse_loss(value, v_target[:,:-1]),
+            #                             mse_loss(v_clip, v_target[:,:-1])).mean()
+            loss_critic = ((value - v_target[:,:-1]) ** 2).mean()
+
+            ## total loss
+            optimizer.zero_grad()
+            loss_critic.backward()
+            optimizer.step()
+
+        print(ep_ret, v_old.mean().item())
         return ep_ret
