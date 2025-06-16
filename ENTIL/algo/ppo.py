@@ -170,5 +170,5 @@ class PPO(object):
             optimizer.zero_grad()
             loss_critic.backward()
             optimizer.step()
-        print(ep_ret, vals.mean().item())
+        # print(ep_ret, vals.mean().item())
         return ep_ret
