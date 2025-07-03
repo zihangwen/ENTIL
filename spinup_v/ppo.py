@@ -9,7 +9,7 @@ import core
 from utils.logx import EpochLogger
 from utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
-
+import os
 
 class PPOBuffer:
     """
@@ -355,42 +355,63 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         logger.log_tabular('Time', time.time()-start_time)
         logger.dump_tabular()
 
-# %%
-if __name__ == '__main__':
-    # import argparse
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--env', type=str, default='HalfCheetah')
-    # parser.add_argument('--hid', type=int, default=64)
-    # parser.add_argument('--l', type=int, default=2)
-    # parser.add_argument('--gamma', type=float, default=0.99)
-    # parser.add_argument('--seed', '-s', type=int, default=0)
-    # parser.add_argument('--cpu', type=int, default=1)
-    # parser.add_argument('--steps', type=int, default=4000)
-    # parser.add_argument('--epochs', type=int, default=50)
-    # parser.add_argument('--exp_name', type=str, default='ppo_HalfCheetah')
-    # args = parser.parse_args()
-
+def run_multiple_seeds(env_name='HalfCheetah-v5', num_seeds=10, epochs=250):
+    """Run PPO with multiple seeds and save results"""
+    
     @dataclass
     class PPOConfig:
-        env: str = 'HalfCheetah'
+        env: str = env_name
         hid: int = 64
-        l: int = 2
+        l: int = 2  
         gamma: float = 0.99
         seed: int = 0
-        cpu: int = 1
+        cpu: int = 4
         steps: int = 4000
-        epochs: int = 250
-        exp_name: str = 'ppo_HalfCheetah'
+        epochs: int = 750
+        exp_name: str = f'ppo_{env_name}_multiseed'
 
-    args = PPOConfig()
+    results = []
+    
+    for seed in range(num_seeds):
+        print(f"\n=== Running seed {seed} ===")
+        
+        args = PPOConfig()
+        args.seed = seed
+        args.exp_name = f'ppo_{env_name}_seed{seed}'
+        
+        from utils.run_utils import setup_logger_kwargs
+        logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
+        
+        # Run PPO for this seed
+        ppo(lambda : gym.make(args.env), 
+            actor_critic=core.MLPActorCritic,
+            ac_kwargs=dict(hidden_sizes=[args.hid, 32]),  
+            gamma=args.gamma, 
+            seed=args.seed, 
+            steps_per_epoch=args.steps, 
+            epochs=args.epochs,
+            lam=0.95,  
+            logger_kwargs=logger_kwargs)
+        
+        import pandas as pd
+        progress_file = os.path.join(logger_kwargs['output_dir'], 'progress.txt')
+        if os.path.exists(progress_file):
+            seed_data = pd.read_csv(progress_file, sep='\t')
+            seed_data['Seed'] = seed
+            results.append(seed_data)
+    
+    if results:
+        all_data = pd.concat(results, ignore_index=True)
+        
+        os.makedirs('./results', exist_ok=True)
+        all_data.to_csv(f'./results/ppo_{env_name}_all_seeds.csv', index=False)
+        
+        print(f"\nAll results saved to ./results/ppo_{env_name}_all_seeds.csv")
+        return all_data
+    
+    return None
 
-    mpi_fork(args.cpu)  # run parallel code with mpi
 
-    from utils.run_utils import setup_logger_kwargs
-    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
-
-    ppo(lambda : gym.make(args.env), actor_critic=core.MLPActorCritic,
-        ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma, 
-        seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-        logger_kwargs=logger_kwargs)
-# %%
+if __name__ == '__main__':
+    # Run multiple seeds
+    all_results = run_multiple_seeds('Walker2d-v5', num_seeds=10, epochs=750)
