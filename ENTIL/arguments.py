@@ -35,18 +35,18 @@ def get_args():
     parser.add_argument(
         '--gamma',
         type=float,
-        default=0.95,
-        help='discount factor (default: 0.95)')
+        default=0.99,
+        help='discount factor (default: 0.99)')
     parser.add_argument(
         '--epsilon',
         type=float,
-        default=0.1,
-        help='epsilon for epsilon-greedy action selection (default: 0.1)')
+        default=0.2,
+        help='clip ratio for epsilon-greedy action selection (default: 0.2)')
     parser.add_argument(
         '--lam',
         type=float,
         default=0.97,
-        help='lam Lambda for GAE-Lambda. (Always between 0 and 1, close to 1.)')
+        help='Lambda for GAE-Lambda. (Always between 0 and 1, close to 1.)')
     parser.add_argument(
         '--target-kl',
         type=float,

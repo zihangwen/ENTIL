@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 
 # %%
-spinup_data = pd.read_csv('/home/zihangw/ENTIL/data/ppo_HalfCheetah_0/ppo_HalfCheetah_s0/progress.txt', sep='\t')
+spinup_data = pd.read_csv('/home/zihangw/ENTIL/data_old/ppo_HalfCheetah_0/ppo_HalfCheetah_s0/progress.txt', sep='\t')
 
 with open('/home/zihangw/ENTIL/data/ENTIL/HalfCheetah-v5/logger.pkl', 'rb') as f:
     entil_logger = pickle.load(f)

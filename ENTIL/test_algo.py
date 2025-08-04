@@ -1,16 +1,16 @@
 # %%
-import sys
+# import sys
 import time
-import os
+# import os
 from pathlib import Path
 
-import numpy as np
+# import numpy as np
 # import matplotlib.pyplot as plt
-import pickle
+# import pickle
 
 import torch 
-import torch.nn as nn
-import torch.optim as optim
+# import torch.nn as nn
+# import torch.optim as optim
 
 import gymnasium as gym
 
@@ -20,6 +20,8 @@ from algo.ppo import PPO
 # from arguments import get_args
 
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+start_time = time.time()
 
 # %%
 # args = get_args()
@@ -40,16 +42,18 @@ from algo.ppo import PPO
 game_name = "HalfCheetah-v5"
 n_games = 4
 entropy_coef = 0
-out_dir = Path(f"../data/ENTIL/{game_name}")
+out_dir = Path(f"data/ENTIL/{game_name}")
 T_max = 1000
 n_epochs = 250
+seed = 0
+
 gamma = 0.99
 epsilon = 0.2
-n_hidden = 64
-lam = 0.95
+lam = 0.97
 target_kl = 0.01
 train_a_iters = 80
 train_v_iters = 80
+n_hidden = 64
 
 # %%
 game_config = {
@@ -69,9 +73,14 @@ training_config = {
 }
 
 # %%
+# np.random.seed(seed)
+torch.manual_seed(seed)
+torch.cuda.manual_seed_all(seed)
+
 envs = gym.make_vec(
     game_config['game_name'], num_envs=game_config['N_games'], vectorization_mode="sync"
 )
+envs.reset(seed=seed)
 
 n_obs = envs.observation_space.shape[1]
 n_action = envs.action_space.shape[1]
@@ -105,5 +114,5 @@ torch.save(algo.agent.state_dict(), out_dir / "ppo_agent.pt")
 # with open(out_dir / "reward_training.pkl", "wb") as f:
 #     pickle.dump(reward_training, f)
 
-
 # %%
+print(f"--- {time.time() - start_time} seconds ---")

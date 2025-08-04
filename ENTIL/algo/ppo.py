@@ -81,7 +81,7 @@ class PPO(object):
     #     return test_reward.mean().item()
 
     def train(self, n : int = 1):
-        torch.manual_seed(10000)
+        # torch.manual_seed(10000)
         # np.random.seed(seed)
         for i in tqdm(range(n), desc = "Training"):
             self._train()
