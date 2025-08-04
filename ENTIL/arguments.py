@@ -67,6 +67,11 @@ def get_args():
         type=int,
         default=64,
         help='number of hidden units in the actor and critic networks (default: 64)')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=0,
+        help='random seed (default: 0)')
 
     args = parser.parse_args()
 

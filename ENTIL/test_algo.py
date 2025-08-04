@@ -27,9 +27,10 @@ start_time = time.time()
 args = get_args()
 game_name = args.env_name
 n_games = args.num_envs
-out_dir = Path(args.out_dir)
 T_max = args.T_max
 n_epochs = args.n_epochs
+seed = args.seed
+out_dir = Path(args.out_dir)
 
 entropy_coef = args.entropy_coef
 gamma = args.gamma
