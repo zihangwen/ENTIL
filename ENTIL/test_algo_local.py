@@ -24,36 +24,20 @@ from arguments import get_args
 start_time = time.time()
 
 # %%
-args = get_args()
-game_name = args.env_name
-n_games = args.num_envs
-out_dir = Path(args.out_dir)
-T_max = args.T_max
-n_epochs = args.n_epochs
+game_name = "HalfCheetah-v5"
+n_games = 4
+T_max = 1000
+n_epochs = 250
+seed = 0
+out_dir = Path(f"data/ENTIL/{game_name}")
 
-entropy_coef = args.entropy_coef
-gamma = args.gamma
-epsilon = args.epsilon
-lam = args.lam
-target_kl = args.target_kl
-train_a_iters = args.train_a_iters
-train_v_iters = args.train_v_iters
-n_hidden = args.n_hidden
-
-# game_name = "HalfCheetah-v5"
-# n_games = 4
-# T_max = 1000
-# n_epochs = 250
-# seed = 0
-# out_dir = Path(f"data/ENTIL/{game_name}")
-
-# gamma = 0.99
-# epsilon = 0.2
-# lam = 0.97
-# target_kl = 0.01
-# train_a_iters = 80
-# train_v_iters = 80
-# n_hidden = 64
+gamma = 0.99
+epsilon = 0.2
+lam = 0.97
+target_kl = 0.01
+train_a_iters = 80
+train_v_iters = 80
+n_hidden = 64
 
 # %%
 game_config = {
